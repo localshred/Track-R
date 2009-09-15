@@ -5,16 +5,16 @@ class Story
     :labels
 
   attr_reader :id, :url
-
+  
   def initialize(options = {})
-    @token      = options[:token].to_s
-    if options.include?(:project_id) && options.include?(:story_id) && options.include?(:token)
+    @token      = options[:token].to_s || Token.new
+    if options.include?(:project_id) && options.include?(:story_id)
       @id         = options[:story_id]
       @project_id = options[:project_id]
       @url        = "http://www.pivotaltracker.com/story/show/#{@id}"
       @api_url    = "http://www.pivotaltracker.com/services/v2/projects/#{@project_id}/stories/#{@id}"
       @story      = Hpricot(open(@api_url, {"X-TrackerToken" => @token}))
-    elsif options.include?(:story) && options.include?(:project_id) && options.include?(:token)
+    elsif options.include?(:story) && options.include?(:project_id)
       @project_id = options[:project_id]
       @story      = options[:story]
     else

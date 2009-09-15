@@ -2,15 +2,16 @@
 # Receives a hash with either :project key pointing to an hpricot object or a
 # project_id and a token with which to fetch and build the project object
 class Project
-  attr_reader :name, :iteration_length, :id, :week_start_day, :point_scale, :api_url, :url, :token, :meta
-  
+  attr_reader :name, :iteration_length, :id, :week_start_day, :point_scale,
+    :api_url, :url, :token
+
   def initialize(options = {})
-    @token   = options[:token] || Token.new
     if options.include?(:project_id)
       @id      = options[:project_id]
+      @token   = options[:token].to_s || CONFIG[:api_token]
       @api_url = "#{CONFIG[:api_location]}/projects/#{@id}"
       @url     = "#{CONFIG[:site_location]}/projects/#{@id}"
-      @project = Hpricot(open(@api_url, {"X-TrackerToken" => @token.to_s}))
+      @project = Hpricot(open(@api_url, {"X-TrackerToken" => @token}))
       @stories = nil
     elsif options.include?(:project)
       @project = options[:project]
@@ -19,17 +20,15 @@ class Project
     end
     build_project
   end
-  
-  # Builds an array containing the project's stories
+
+  # Builds an array containing the project's story
   def stories ; @stories || get_stories ; end
-  
-  def iterations ; @iterations || get_iterations ; end
-  
+
   # Fetches a story with given id
   def story(id)
-    Story.new(:story_id => id, :project_id => @id, :token => @token.to_s)
+    Story.new(:story_id => id, :project_id => @id, :token => @token)
   end
-  
+
   # Creates a story for this project. Receives a set of valid attributes.
   # Returns a Story object
   # TODO: Validate attributes
@@ -37,13 +36,13 @@ class Project
     api_url = URI.parse("#{CONFIG[:api_location]}/projects/#{@id}/stories")
     query_string = attributes.map { |key, value| "story[#{key}]=#{CGI::escape(value)}"}.join('&')
     response = Net::HTTP.start(api_url.host, api_url.port) do |http|
-      http.post(api_url.path, query_string.concat("&token=#{@token.to_s}"))
+      http.post(api_url.path, query_string.concat("&token=#{@token}"))
     end
-  
+
     story = (Hpricot(response.body)/:story)
-    Story.new(:story => story, :project_id => @id, :token => @token.to_s)
+    Story.new(:story => story, :project_id => @id, :token => @token)
   end
-  
+
   # Deletes a story given a Story object or a story_id
   def delete_story(story)
     if story.is_a?(Story)
@@ -54,44 +53,28 @@ class Project
       raise ArgumentError, "Should receive a story id or a Story object."
     end
     response = Net::HTTP.start(api_url.host, api_url.port) do |http|
-      http.delete(api_url.path, {"X-TrackerToken" => @token.to_s})
+      http.delete(api_url.path, {"X-TrackerToken" => @token})
     end
     story = (Hpricot(response.body)/:story)
-    Story.new(:story => story, :project_id => @id, :token => @token.to_s)
+    Story.new(:story => story, :project_id => @id, :token => @token)
   end
-  
+
   def get_iterations(iteration_type=nil)
-    @iterations = Iteration.find(:project_id => @id, :type => iteration_type) || []
+    Iteration.find(:project_id => @id, :type => type)
   end
-  
+
   # Gets the stories for a given iteration
   def get_iteration_stories(iteration_type=nil)
-    @stories = get_iterations(iteration_type).stories
+    get_iterations(type).stories
   end
-  
-  def num_stories
-    stories.size || 0
-  end
-  
-  def num_completed_stories
-    num_completed_stories = 0
-    stories.each do |story|
-      num_completed_stories += 1 if completed_statuses.include?(story.current_state)
-    end
-    num_completed_stories
-  end
-  
-  def current_target_date
-    get_iterations.last.finish_date
-  end
-  
-  def completed_statuses
-    %w{ finished delivered accepted }
-  end
-  
-  # Builds an array containing the project's stories
+
+  # Gets the current iteration's stories
+  # def current_stories
+    # get_stories_by_iteration("current")
+  # end
+
   protected
-  
+
   # Builds a project given an hpricot object stored at instance variable
   # @project
   def build_project
@@ -102,21 +85,18 @@ class Project
     @iteration_length = @project.at('iteration_length').inner_html
     @week_start_day   = @project.at('week_start_day').inner_html
     @point_scale      = @project.at('point_scale').inner_html.split(',')
-    @meta             = ProjectMeta.find_by_project_id(@id)
-    if @meta.nil?
-      init_meta
-    else
-      @meta.sync(self)
-    end
-  end
-  
-  def get_stories
-    api_url = "#{CONFIG[:api_location]}/projects/#{@id}/stories"
-    @stories = (Hpricot(open(api_url, {"X-TrackerToken" => @token.to_s}))/:story).map {|story| Story.new(:story => story, :project_id => @id)}
-  end
-  
-  def init_meta
-    @meta = ProjectMeta.create_from_project(self)
   end
 
-end
+  # Builds an array containing the project's stories
+  def get_stories
+    api_url = "#{CONFIG[:api_location]}/projects/#{@id}/stories"
+    @stories = (Hpricot(open(api_url, {"X-TrackerToken" => @token.to_s}))/:story).map {|story| Story.new(:story => story, :project_id => @id, :token => @token)}
+  end
+
+  # Builds an array containing the project's stories for a given iteration
+  # def get_stories_by_iteration(name)
+  #   api_url = "#{CONFIG[:api_location]}/projects/#{@id}/iterations/#{name}"
+  #   @stories = (Hpricot(open(api_url, {"X-TrackerToken" => @token.to_s}))/:story).map {|story| Story.new(:story => story, :project_id => @id, :token => @token)}
+  # end
+
+end # class Tracker::Project

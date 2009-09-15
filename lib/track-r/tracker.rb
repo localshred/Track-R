@@ -6,15 +6,15 @@ class Tracker
 
   # To generate a token, use the "Create New Token" link on the My Profile
   # page (http://www.pivotaltracker.com/profile).
-  def initialize(token)
-    @token = token
+  def initialize(token=nil)
+    @token = token || Token.new
     raise TypeError unless @token.is_a? Token
   end
 
   # Fetches project with given ID
   # Returns a Project object
   def project(project_id)
-    @project = Project.new(:project_id => project_id , :token => @token)
+    @project = Project.new(:project_id => project_id)
   end
 
   # Refresh the projects from the server
@@ -38,6 +38,12 @@ class Tracker
     end
   end
 
+  # Uses the ProjectMeta model to find locally stored projects and their api counterparts
+  def self.find_local(is_active=nil)
+    local = ProjectMeta.find_local(is_active)
+    local.map{|meta| Tracker.new.find_project{|project| puts "+++#{meta.project_id} == #{project.id}"; meta.project_id == project.id } } unless local.nil? || local.empty?
+  end
+  
   protected
 
   # Fills @projects. NOTE: call sync method to refill/sync @projects
